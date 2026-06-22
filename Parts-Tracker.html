@@ -152,7 +152,32 @@ button{cursor:pointer;font-family:inherit;font-size:13px}
 .dbg-line{padding:2px 0;border-bottom:1px solid var(--border);color:var(--text2)}
 .dbg-line.ok{color:var(--dot-all)}.dbg-line.err{color:var(--err-text)}.dbg-line.info{color:var(--info-text)}
 
-/* ── Warehouse view ── */
+/* ── Comments ── */
+.comment-badge{position:absolute;top:-4px;right:-4px;background:var(--err-text);color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 5px;min-width:16px;text-align:center;line-height:16px}
+.ic-btn-wrap{position:relative;display:inline-block}
+.cthread{max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:2px 0 12px}
+.cbubble{display:flex;gap:10px;align-items:flex-start}
+.cavatar{width:28px;height:28px;border-radius:50%;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--text2);flex-shrink:0;border:1px solid var(--border)}
+.cbody{flex:1;min-width:0}
+.cmeta{font-size:10px;color:var(--text3);margin-bottom:3px;display:flex;align-items:center;gap:6px}
+.cauthor{font-weight:600;color:var(--text2)}
+.ctext{font-size:12px;color:var(--text);line-height:1.5;word-break:break-word;background:var(--surface2);padding:8px 10px;border-radius:0 var(--radius-sm) var(--radius-sm) var(--radius-sm);border:1px solid var(--border)}
+.mention{color:var(--info-text);font-weight:600;background:var(--info-bg);border-radius:3px;padding:0 3px}
+.cempty{text-align:center;padding:24px;color:var(--text3);font-size:12px}
+.cempty i{font-size:32px;display:block;margin-bottom:8px}
+.ctag-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.ctag-btn{font-size:11px;padding:3px 8px;border-radius:20px;border:1px solid var(--border2);background:var(--surface);color:var(--text2)}
+.ctag-btn:hover{background:var(--info-bg);color:var(--info-text);border-color:var(--info-text)}
+.ctag-btn.tagged{background:var(--info-bg);color:var(--info-text);border-color:var(--info-text)}
+.cas-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 10px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border)}
+.cas-label{font-size:11px;color:var(--text2);font-weight:600;white-space:nowrap}
+.cas-row select{flex:1;font-size:12px;padding:4px 6px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface);color:var(--text)}
+/* Users settings */
+.user-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
+.user-row:last-child{border-bottom:none}
+.user-avatar-sm{width:26px;height:26px;border-radius:50%;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0;border:1px solid var(--border)}
+.user-name{font-size:13px;font-weight:500;flex:1}
+.user-hook{font-size:10px;color:var(--text3);flex:2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #wv{display:none;min-height:100vh;background:var(--bg)}
 .wv-wrap{max-width:520px;margin:0 auto;padding:16px}
 .wv-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)}
@@ -195,6 +220,7 @@ button{cursor:pointer;font-family:inherit;font-size:13px}
   </div>
   <div class="header-actions">
     <button class="btn" onclick="openImport()"><i class="ti ti-sparkles"></i>Import</button>
+    <button class="btn-icon" onclick="openUserSettings()" title="Users"><i class="ti ti-users"></i></button>
     <button class="btn-icon" onclick="pullFromCloud(true)" title="Sync from cloud"><i class="ti ti-refresh"></i></button>
     <button class="btn-icon" onclick="openSettings()" title="Settings"><i class="ti ti-settings"></i></button>
   </div>
@@ -239,7 +265,8 @@ let S={
     apiKey:'',appUrl:'',
     jsonbin:{key:'',binId:''},
     sage:{url:'',token:'',dateField:'requestedDeliveryDate'},
-    hooks:{c1:{url:'',to:''},c2:{url:'',to:''},c3:{url:'',to:''}}
+    hooks:{c1:{url:'',to:''},c2:{url:'',to:''},c3:{url:'',to:''}},
+    users:[]
   }
 };
 
@@ -432,11 +459,16 @@ function cardHtml(card,colId){
     </div>`;
   }).join('');
 
+  const commentCount=(card.comments||[]).length;
   return`<div class="card" data-id="${card.id}" data-col="${colId}">
     <div class="card-top">
       <span class="card-ref">${esc(card.ref)}</span>
       <div class="card-ar">
         <span class="card-badge">Transfer ${esc(card.transfer)}</span>
+        <div class="ic-btn-wrap">
+          <button class="ic-btn" onclick="event.stopPropagation();openComments('${card.id}','${colId}')" title="Comments"><i class="ti ti-message-circle"></i></button>
+          ${commentCount>0?`<span class="comment-badge">${commentCount}</span>`:''}
+        </div>
         <button class="ic-btn" onclick="event.stopPropagation();openLabel('${card.id}','${colId}')" title="QR label"><i class="ti ti-qrcode"></i></button>
         <button class="ic-btn" onclick="event.stopPropagation();editCard('${card.id}','${colId}')" title="Edit"><i class="ti ti-pencil"></i></button>
       </div>
@@ -912,6 +944,227 @@ function saveSettings(){
   S.cfg.sage={url:document.getElementById('sgurl').value.trim(),token:document.getElementById('sgtok').value.trim(),dateField:document.getElementById('sgfld').value.trim()||'requestedDeliveryDate'};
   ['c1','c2','c3'].forEach(cid=>{S.cfg.hooks[cid]={url:document.getElementById(`hu-${cid}`).value.trim(),to:document.getElementById(`ht-${cid}`).value.trim()};});
   save();closeModal();toast('Settings saved','ok');
+}
+
+// ── Comments ──────────────────────────────────────────────────────────────────
+let _commentCard=null,_commentCol=null,_taggedUsers=new Set();
+
+function activeUser(){
+  return localStorage.getItem('pt-activeuser')||'';
+}
+
+function initials(name){
+  return (name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+}
+
+function timeAgo(ts){
+  const s=Math.floor((Date.now()-ts)/1000);
+  if(s<60)return'just now';
+  if(s<3600)return`${Math.floor(s/60)}m ago`;
+  if(s<86400)return`${Math.floor(s/3600)}h ago`;
+  return new Date(ts).toLocaleDateString('en-GB');
+}
+
+function renderMentions(text){
+  return esc(text).replace(/@(\w[\w\s]*?)(?=\s|$|[^a-zA-Z0-9 ])/g,(m,name)=>`<span class="mention">@${name}</span>`);
+}
+
+function openComments(cardId,colId){
+  _commentCard=cardId;_commentCol=colId;_taggedUsers=new Set();
+  renderCommentModal();
+}
+
+function renderCommentModal(){
+  const card=S.cards[_commentCard];if(!card)return;
+  const comments=card.comments||[];
+  const users=S.cfg.users||[];
+  const au=activeUser();
+
+  const thread=comments.length===0
+    ?`<div class="cempty"><i class="ti ti-message-circle"></i>No comments yet — be the first</div>`
+    :comments.map(c=>`
+      <div class="cbubble">
+        <div class="cavatar" style="background:${userColor(c.author)}">${initials(c.author)}</div>
+        <div class="cbody">
+          <div class="cmeta"><span class="cauthor">${esc(c.author)}</span><span>${timeAgo(c.ts)}</span></div>
+          <div class="ctext">${renderMentions(c.text)}</div>
+        </div>
+      </div>`).join('');
+
+  const tagBtns=users.map(u=>`<button class="ctag-btn ${_taggedUsers.has(u.id)?'tagged':''}" onclick="toggleTag('${u.id}','${esc(u.name)}')" id="tagbtn-${u.id}">@${esc(u.name)}</button>`).join('');
+
+  const userOpts=users.length>0
+    ?users.map(u=>`<option value="${esc(u.name)}" ${u.name===au?'selected':''}>${esc(u.name)}</option>`).join('')
+    :`<option value="">— add users in Settings —</option>`;
+
+  setModal(`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal wide">
+    <h2><i class="ti ti-message-circle"></i>Comments — ${esc(card.ref)}</h2>
+    <div class="cthread" id="cthread">${thread}</div>
+    <div style="border-top:1px solid var(--border);padding-top:12px">
+      <div class="cas-row">
+        <span class="cas-label">Commenting as</span>
+        <select id="c-as" onchange="localStorage.setItem('pt-activeuser',this.value)">${userOpts}</select>
+      </div>
+      <div class="fg">
+        <textarea id="c-text" rows="3" placeholder="Write a comment..." style="resize:none;font-size:13px"></textarea>
+      </div>
+      ${users.length>0?`<div style="font-size:11px;color:var(--text2);margin-bottom:5px;font-weight:600">Tag someone:</div>
+      <div class="ctag-row">${tagBtns}</div>`:'<div style="font-size:11px;color:var(--text3)">Add users in Settings to enable @mentions and Teams notifications.</div>'}
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">Close</button>
+      <button class="btn btn-primary" onclick="postComment()"><i class="ti ti-send"></i>Post</button>
+    </div>
+  </div></div>`);
+
+  // Scroll thread to bottom
+  setTimeout(()=>{const t=document.getElementById('cthread');if(t)t.scrollTop=t.scrollHeight;},50);
+}
+
+function toggleTag(userId,userName){
+  const ta=document.getElementById('c-text');
+  const btn=document.getElementById(`tagbtn-${userId}`);
+  if(_taggedUsers.has(userId)){
+    _taggedUsers.delete(userId);
+    if(btn)btn.classList.remove('tagged');
+    // Remove @name from textarea
+    if(ta)ta.value=ta.value.replace(`@${userName} `,'').replace(`@${userName}`,'');
+  }else{
+    _taggedUsers.add(userId);
+    if(btn)btn.classList.add('tagged');
+    // Insert @name into textarea
+    if(ta){ta.value=(ta.value+` @${userName} `).trimStart();ta.focus();}
+  }
+}
+
+async function postComment(){
+  const card=S.cards[_commentCard];if(!card)return;
+  const text=(document.getElementById('c-text')?.value||'').trim();
+  if(!text){toast('Comment is empty','err');return;}
+  const author=document.getElementById('c-as')?.value||activeUser()||'Unknown';
+  localStorage.setItem('pt-activeuser',author);
+
+  const comment={id:uid(),author,text,ts:Date.now(),mentions:[..._taggedUsers]};
+  if(!card.comments)card.comments=[];
+  card.comments.push(comment);
+
+  await save();
+  _taggedUsers=new Set();
+
+  // Notify tagged users via Teams
+  const users=S.cfg.users||[];
+  for(const uid_ of comment.mentions){
+    const user=users.find(u=>u.id===uid_);
+    if(user?.teamsWebhook)await notifyTeams(user,card,author,text);
+  }
+
+  toast('Comment posted','ok');
+  renderCommentModal();
+  // Re-render card to update badge
+  refreshCard(_commentCard,_commentCol);
+}
+
+async function notifyTeams(user,card,author,text){
+  try{
+    await fetch(user.teamsWebhook,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        '@type':'MessageCard',
+        '@context':'http://schema.org/extensions',
+        themeColor:'0076D7',
+        summary:`${author} mentioned you in Parts Tracker`,
+        sections:[{
+          activityTitle:`📦 ${author} mentioned you in Parts Tracker`,
+          activitySubtitle:`Card: ${card.ref} — ${card.customer}`,
+          text:`"${text}"`,
+          facts:[
+            {name:'Card',value:card.ref},
+            {name:'Customer',value:card.customer},
+            {name:'Transfer',value:card.transfer}
+          ]
+        }],
+        potentialAction:[{
+          '@type':'OpenUri',
+          name:'Open Parts Tracker',
+          targets:[{os:'default',uri:S.cfg.appUrl||''}]
+        }]
+      })
+    });
+    dbg(`Teams notification sent to ${user.name}`,'ok');
+  }catch(e){
+    dbg(`Teams notify failed for ${user.name}: ${e.message}`,'err');
+    toast(`Teams notification to ${user.name} failed`,'err');
+  }
+}
+
+function userColor(name){
+  const colors=['#e8f0fb','#ebf5eb','#fdf4e0','#fbeaea','#f0e8fb','#e8f8fb'];
+  let h=0;for(let i=0;i<(name||'').length;i++)h=(h+name.charCodeAt(i))%colors.length;
+  return colors[h];
+}
+
+// ── User management ───────────────────────────────────────────────────────────
+let _editUsers=[];
+
+function openUserSettings(){
+  _editUsers=JSON.parse(JSON.stringify(S.cfg.users||[]));
+  renderUserSettings();
+}
+
+function renderUserSettings(){
+  const rows=_editUsers.map((u,i)=>`
+    <div class="user-row">
+      <div class="user-avatar-sm" style="background:${userColor(u.name)}">${initials(u.name)}</div>
+      <span class="user-name">${esc(u.name)}</span>
+      <span class="user-hook" title="${esc(u.teamsWebhook)}">${u.teamsWebhook?'Teams webhook set':'No webhook'}</span>
+      <button class="ic-btn" onclick="editUser(${i})" title="Edit"><i class="ti ti-pencil"></i></button>
+      <button class="ic-btn" onclick="rmUser(${i})" title="Remove"><i class="ti ti-trash"></i></button>
+    </div>`).join('');
+
+  setModal(`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal wide">
+    <h2><i class="ti ti-users"></i>Users</h2>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.6">
+      Add everyone who uses the tracker. Users can be @mentioned in comments and each can have a personal Teams webhook so they get notified when tagged.<br><br>
+      <strong>Teams webhook:</strong> In Teams, go to the channel or chat → … → Connectors → Incoming Webhook → create one per person. Or use a Power Automate flow triggered by HTTP that sends a Teams chat to that person.
+    </div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:2px 10px;margin-bottom:14px;min-height:40px">
+      ${rows||'<div style="padding:12px 0;font-size:12px;color:var(--text3);text-align:center">No users yet</div>'}
+    </div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:4px">
+      <div style="font-size:12px;font-weight:600;margin-bottom:10px">Add user</div>
+      <div class="g2">
+        <div class="fg"><label>Name</label><input id="nu-name" placeholder="e.g. Ashley"/></div>
+        <div class="fg"><label>Teams webhook URL</label><input id="nu-hook" placeholder="https://company.webhook.office.com/…"/></div>
+      </div>
+      <button class="btn btn-primary" onclick="addUser()" style="width:100%">Add user</button>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveUsers()">Save users</button>
+    </div>
+  </div></div>`);
+}
+
+function addUser(){
+  const name=document.getElementById('nu-name')?.value.trim();
+  const hook=document.getElementById('nu-hook')?.value.trim();
+  if(!name){toast('Enter a name','err');return;}
+  _editUsers.push({id:uid(),name,teamsWebhook:hook||''});
+  renderUserSettings();
+}
+
+function rmUser(i){_editUsers.splice(i,1);renderUserSettings()}
+
+function editUser(i){
+  const u=_editUsers[i];
+  const name=prompt('Name:',u.name);if(name===null)return;
+  const hook=prompt('Teams webhook URL (leave blank to clear):',u.teamsWebhook);
+  _editUsers[i]={...u,name:name.trim(),teamsWebhook:(hook||'').trim()};
+  renderUserSettings();
+}
+
+function saveUsers(){
+  S.cfg.users=_editUsers;
+  save();closeModal();toast('Users saved','ok');
 }
 
 function setModal(html){document.getElementById('modal').innerHTML=html}
