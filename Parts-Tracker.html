@@ -146,6 +146,11 @@ button{cursor:pointer;font-family:inherit;font-size:13px}
 .toast{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;max-width:280px;animation:tin .2s ease;pointer-events:auto}
 .toast.ok{border-left:3px solid var(--dot-all)}.toast.err{border-left:3px solid var(--err-text)}.toast.info{border-left:3px solid var(--info-text)}
 @keyframes tin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* Debug log */
+.dbg-panel{position:fixed;bottom:20px;left:20px;z-index:200;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px;font-size:10px;font-family:monospace;max-width:320px;max-height:200px;overflow-y:auto;display:none}
+.dbg-panel.show{display:block}
+.dbg-line{padding:2px 0;border-bottom:1px solid var(--border);color:var(--text2)}
+.dbg-line.ok{color:var(--dot-all)}.dbg-line.err{color:var(--err-text)}.dbg-line.info{color:var(--info-text)}
 
 /* ── Warehouse view ── */
 #wv{display:none;min-height:100vh;background:var(--bg)}
@@ -186,7 +191,7 @@ button{cursor:pointer;font-family:inherit;font-size:13px}
     <i class="ti ti-packages" style="font-size:20px;color:var(--text2)"></i>
     <h1>Parts Tracker</h1>
     <span class="hpill" id="total-pill">0 cards</span>
-    <span class="sync-dot" id="sync-dot" title="Cloud sync status"></span>
+    <span class="sync-dot" id="sync-dot" title="Click to see sync log" onclick="toggleDbg()" style="cursor:pointer"></span>
   </div>
   <div class="header-actions">
     <button class="btn" onclick="openImport()"><i class="ti ti-sparkles"></i>Import</button>
@@ -205,6 +210,7 @@ button{cursor:pointer;font-family:inherit;font-size:13px}
 
 <div id="modal"></div>
 <div class="toasts" id="toasts"></div>
+<div class="dbg-panel" id="dbg"></div>
 
 <script>
 // ── Columns ───────────────────────────────────────────────────────────────────
@@ -214,6 +220,17 @@ const COLS=[
   {id:'c2',label:'In stock – transfer needed'},
   {id:'c3',label:'Ready to schedule'}
 ];
+
+// ── Debug log ─────────────────────────────────────────────────────────────────
+function dbg(msg,type='info'){
+  console.log(`[PT] ${msg}`);
+  const p=document.getElementById('dbg');if(!p)return;
+  const line=document.createElement('div');
+  line.className=`dbg-line ${type}`;
+  line.textContent=`${new Date().toLocaleTimeString()} ${msg}`;
+  p.appendChild(line);p.scrollTop=p.scrollHeight;
+}
+function toggleDbg(){const p=document.getElementById('dbg');if(p)p.classList.toggle('show')}
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let S={
@@ -238,62 +255,73 @@ function setSyncDot(state){
 
 async function pushToCloud(){
   const jb=S.cfg.jsonbin;
-  if(!jb||!jb.key)return;
-  setSyncDot('busy');
+  if(!jb||!jb.key){dbg('Push skipped — no JSONBin key','err');return;}
+  setSyncDot('busy');dbg('Pushing to JSONBin...');
   try{
     S.lastModified=Date.now();
     const payload={cards:S.cards,cols:S.cols,lastModified:S.lastModified};
     let url,method;
-    if(jb.binId){
-      url=`https://api.jsonbin.io/v3/b/${jb.binId}`;method='PUT';
-    }else{
-      url='https://api.jsonbin.io/v3/b';method='POST';
-    }
+    if(jb.binId){url=`https://api.jsonbin.io/v3/b/${jb.binId}`;method='PUT';}
+    else{url='https://api.jsonbin.io/v3/b';method='POST';}
+    dbg(`${method} ${url}`);
     const res=await fetch(url,{method,
       headers:{'Content-Type':'application/json','X-Master-Key':jb.key,'X-Bin-Name':'PartsTracker'},
       body:JSON.stringify(payload)
     });
     const data=await res.json();
+    dbg(`Response: ${res.status} ${JSON.stringify(data).slice(0,80)}`,res.ok?'ok':'err');
+    if(!res.ok)throw new Error(`HTTP ${res.status}: ${JSON.stringify(data)}`);
     if(method==='POST'&&data.metadata?.id){
       S.cfg.jsonbin.binId=data.metadata.id;
       saveLocal();
-      toast('Cloud storage created — bin ID saved','ok');
+      toast(`Cloud storage created — Bin ID: ${data.metadata.id}`,'ok');
+      dbg(`Bin created: ${data.metadata.id}`,'ok');
     }
-    setSyncDot('ok');
+    setSyncDot('ok');toast('Synced to cloud','ok');
   }catch(e){
     setSyncDot('err');
-    console.warn('Cloud push failed:',e);
+    dbg(`Push error: ${e.message}`,'err');
+    toast(`Sync failed: ${e.message}`,'err');
   }
 }
 
 async function pullFromCloud(showToast=false){
-  const jb=S.cfg.jsonbin;
-  if(!jb||!jb.key||!jb.binId){
+  // Credentials can come from settings (main board) or URL params (warehouse phone)
+  const urlP=new URLSearchParams(location.search);
+  const key=(S.cfg.jsonbin?.key)||urlP.get('jbk')||'';
+  const binId=(S.cfg.jsonbin?.binId)||urlP.get('jbi')||'';
+  if(!key||!binId){
+    dbg(`Pull skipped — key:${!!key} binId:${!!binId}`,'err');
     if(showToast)toast('Set up JSONBin in Settings to enable cloud sync','info');
     return null;
   }
-  setSyncDot('busy');
+  setSyncDot('busy');dbg(`Pulling from bin ${binId}...`);
   try{
-    const res=await fetch(`https://api.jsonbin.io/v3/b/${jb.binId}/latest`,{
-      headers:{'X-Master-Key':jb.key}
+    const res=await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`,{
+      headers:{'X-Master-Key':key}
     });
     const data=await res.json();
+    dbg(`Pull response: ${res.status}`,res.ok?'ok':'err');
+    if(!res.ok)throw new Error(`HTTP ${res.status}: ${JSON.stringify(data)}`);
     const remote=data.record;
+    dbg(`Remote lastModified: ${remote?.lastModified}, local: ${S.lastModified||0}`);
     if(remote&&remote.lastModified>(S.lastModified||0)){
       S.cards=remote.cards||{};
       S.cols=remote.cols||{c0:[],c1:[],c2:[],c3:[]};
       S.lastModified=remote.lastModified;
       saveLocal();
       if(showToast)toast('Board updated from cloud','ok');
-      setSyncDot('ok');
-      return remote;
+      dbg('Pulled newer data from cloud','ok');
+      setSyncDot('ok');return remote;
     }
     setSyncDot('ok');
+    dbg('Local data is current','ok');
     if(showToast)toast('Already up to date','info');
     return null;
   }catch(e){
     setSyncDot('err');
-    if(showToast)toast('Cloud sync failed — check JSONBin key','err');
+    dbg(`Pull error: ${e.message}`,'err');
+    if(showToast)toast(`Sync failed: ${e.message}`,'err');
     return null;
   }
 }
@@ -461,9 +489,19 @@ function openLabel(cardId,colId){
   const card=S.cards[cardId];
   const appUrl=(S.cfg.appUrl||'').replace(/\/$/,'');
   const hasUrl=!!appUrl;
-  const qrUrl=hasUrl?`${appUrl}?view=${cardId}`:`${card.ref} · ${card.customer} · Transfer ${card.transfer}`;
+  const jbk=S.cfg.jsonbin?.key||'';
+  const jbi=S.cfg.jsonbin?.binId||'';
+  const hasCloud=!!(jbk&&jbi);
+  // Build QR URL — include bin credentials so phone works without local settings
+  let qrUrl;
+  if(hasUrl&&hasCloud){
+    qrUrl=`${appUrl}?view=${cardId}&jbk=${encodeURIComponent(jbk)}&jbi=${encodeURIComponent(jbi)}`;
+  }else if(hasUrl){
+    qrUrl=`${appUrl}?view=${cardId}`;
+  }else{
+    qrUrl=`${card.ref} · ${card.customer} · Transfer ${card.transfer}`;
+  }
   const today=new Date().toLocaleDateString('en-GB');
-  const hasCloud=!!(S.cfg.jsonbin?.key&&S.cfg.jsonbin?.binId);
 
   setModal(`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal wide">
     <h2><i class="ti ti-qrcode"></i>QR label</h2>
@@ -548,22 +586,39 @@ async function showWarehouseView(cardId){
   document.getElementById('main-hdr').style.display='none';
   document.getElementById('board').style.display='none';
   document.getElementById('wv').style.display='block';
+  const dbgP=document.getElementById('dbg');if(dbgP)dbgP.classList.add('show');
+  dbg(`Warehouse view loading — card: ${cardId}`);
 
-  // Try to get latest from cloud first
-  const remote=await pullFromCloud(false);
+  // Load credentials from URL params (phone won't have localStorage settings)
+  const urlP=new URLSearchParams(location.search);
+  const urlKey=urlP.get('jbk')||'';
+  const urlBin=urlP.get('jbi')||'';
+  dbg(`URL params — jbk:${urlKey?'present':'missing'} jbi:${urlBin?'present':'missing'}`);
+  dbg(`Local settings — key:${S.cfg.jsonbin?.key?'present':'missing'} binId:${S.cfg.jsonbin?.binId?'present':'missing'}`);
+
+  if(urlKey&&urlBin){
+    if(!S.cfg.jsonbin)S.cfg.jsonbin={};
+    S.cfg.jsonbin.key=urlKey;
+    S.cfg.jsonbin.binId=urlBin;
+    dbg('Credentials loaded from URL','ok');
+  }
+
+  await pullFromCloud(false);
 
   const card=S.cards[cardId];
   const wvc=document.getElementById('wv-content');
 
   if(!card){
+    dbg(`Card ${cardId} not found after pull`,'err');
     wvc.innerHTML=`<div class="wv-not-found">
       <i class="ti ti-wifi-off"></i>
       <div style="font-size:16px;font-weight:700;margin-bottom:8px">Card not found</div>
-      <div style="font-size:13px;color:var(--text3)">Make sure cloud sync (JSONBin) is set up and this device is on the same network as the main board.</div>
+      <div style="font-size:13px;color:var(--text3);margin-bottom:16px">Check the debug log (dot top left) for details.</div>
     </div>`;
     return;
   }
 
+  dbg(`Card found: ${card.ref}`,'ok');
   renderWarehouseCard(cardId);
 }
 
@@ -622,23 +677,44 @@ async function wvTick(cardId,ai,pi,chk){
     const nm=row.querySelector('.wv-pname');
     if(nm)nm.className='wv-pname'+(chk.checked?' wv-done-lbl':'');
   }
-  // Update progress
+  // Update progress bar
   const{done,total}=cardProg(S.cards[cardId]);
   const pct=total>0?Math.round(done/total*100):0;
   const pbar=document.getElementById('wv-pbar');if(pbar)pbar.style.width=pct+'%';
   const plbl=document.getElementById('wv-prog-label');if(plbl)plbl.textContent=`${done} of ${total} parts confirmed`;
-  // Update asset status dots
-  (S.cards[cardId].assets||[]).forEach((a,aIdx)=>{
-    const{done:ad,total:at}=assetProg(a);
-    // No per-row dot update needed — card is already visually updated
-  });
-  // Save to cloud
-  setSyncDot('busy');const dot=document.getElementById('wv-sync-dot');if(dot)dot.className='sync-dot busy';
-  await save();
-  // Show saved flash
-  const sv=document.getElementById('wv-saved');
-  if(sv){sv.classList.add('show');setTimeout(()=>sv.classList.remove('show'),1800);}
-  if(dot)dot.className='sync-dot ok';
+  // Get credentials — from URL params (phone) or settings (local)
+  const urlP=new URLSearchParams(location.search);
+  const key=(S.cfg.jsonbin?.key)||urlP.get('jbk')||'';
+  const binId=(S.cfg.jsonbin?.binId)||urlP.get('jbi')||'';
+  const dot=document.getElementById('wv-sync-dot');
+  if(dot)dot.className='sync-dot busy';
+  dbg(`wvTick: saving to bin ${binId||'(none)'}`);
+  if(key&&binId){
+    try{
+      S.lastModified=Date.now();
+      const payload={cards:S.cards,cols:S.cols,lastModified:S.lastModified};
+      const res=await fetch(`https://api.jsonbin.io/v3/b/${binId}`,{
+        method:'PUT',
+        headers:{'Content-Type':'application/json','X-Master-Key':key},
+        body:JSON.stringify(payload)
+      });
+      dbg(`wvTick save: ${res.status}`,res.ok?'ok':'err');
+      if(dot)dot.className='sync-dot '+(res.ok?'ok':'err');
+      if(res.ok){
+        const sv=document.getElementById('wv-saved');
+        if(sv){sv.classList.add('show');setTimeout(()=>sv.classList.remove('show'),1800);}
+      }else{
+        const d=await res.json();
+        dbg(`Save error: ${JSON.stringify(d)}`,'err');
+      }
+    }catch(e){
+      dbg(`wvTick error: ${e.message}`,'err');
+      if(dot)dot.className='sync-dot err';
+    }
+  }else{
+    dbg('No credentials for save — key or binId missing','err');
+    if(dot)dot.className='sync-dot err';
+  }
 }
 
 // ── Add / Edit form ───────────────────────────────────────────────────────────
