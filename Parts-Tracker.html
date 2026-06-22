@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Parts Tracker</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{
+  --bg:#f0efe9;--surface:#fff;--surface2:#f7f6f2;--surface3:#eeedea;
+  --border:rgba(0,0,0,.09);--border2:rgba(0,0,0,.16);
+  --text:#1a1a18;--text2:#6a6a66;--text3:#a0a09a;
+  --radius:10px;--radius-sm:7px;
+  --ok-bg:#ebf5eb;--ok-text:#256025;
+  --warn-bg:#fdf4e0;--warn-text:#7a5400;
+  --err-bg:#fbeaea;--err-text:#8a2020;
+  --info-bg:#e8f0fb;--info-text:#1a4080;
+  --dot-all:#3a8a3a;--dot-some:#c08000;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#181816;--surface:#222220;--surface2:#2a2a28;--surface3:#323230;
+  --border:rgba(255,255,255,.08);--border2:rgba(255,255,255,.15);
+  --text:#f0eeea;--text2:#908e88;--text3:#606058;
+  --ok-bg:#162416;--ok-text:#80c880;--warn-bg:#2a2000;--warn-text:#e0b050;
+  --err-bg:#280e0e;--err-text:#f09090;--info-bg:#101830;--info-text:#8ab0f0;
+  --dot-all:#5ab05a;--dot-some:#d09020;
+}}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.5}
+
+/* Header */
+.header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;gap:10px}
+.header-left{display:flex;align-items:center;gap:10px;min-width:0}
+.header h1{font-size:15px;font-weight:600;letter-spacing:-.01em;white-space:nowrap}
+.hpill{font-size:11px;font-weight:500;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:2px 10px;color:var(--text2);white-space:nowrap}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--border2);flex-shrink:0;transition:background .3s}
+.sync-dot.ok{background:var(--dot-all)}.sync-dot.err{background:var(--err-text)}.sync-dot.busy{background:var(--warn-text);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.header-actions{display:flex;gap:6px;flex-shrink:0}
+
+/* Buttons */
+button{cursor:pointer;font-family:inherit;font-size:13px}
+.btn{padding:7px 14px;border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surface);color:var(--text);display:inline-flex;align-items:center;gap:6px}
+.btn:hover{background:var(--surface2)}.btn:active{transform:scale(.98)}
+.btn-primary{background:var(--text);color:var(--surface);border-color:var(--text)}.btn-primary:hover{opacity:.85}
+.btn-icon{width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surface);color:var(--text2);font-size:17px}
+.btn-icon:hover{background:var(--surface2);color:var(--text)}
+.btn-ghost{background:transparent;border:1px dashed var(--border2);color:var(--text2);padding:7px 14px;border-radius:var(--radius-sm);display:inline-flex;align-items:center;gap:6px;width:100%;justify-content:center}
+.btn-ghost:hover{background:var(--surface);color:var(--text)}
+.btn-danger{background:none;border:none;color:var(--text3);font-size:16px;padding:0 2px;line-height:1}.btn-danger:hover{color:var(--err-text)}
+.ic-btn{background:none;border:none;padding:2px 4px;color:var(--text3);font-size:14px;line-height:1;border-radius:4px}.ic-btn:hover{color:var(--text);background:var(--surface2)}
+
+/* Board */
+.board{display:flex;gap:12px;padding:20px;overflow-x:auto;min-height:calc(100vh - 57px);align-items:flex-start}
+.col{flex:0 0 290px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border)}
+.col-head{padding:11px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.col-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text2)}
+.col-count{font-size:11px;font-weight:500;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:1px 9px;color:var(--text2);min-width:24px;text-align:center}
+.col-body{padding:10px;min-height:60px}.col-foot{padding:0 10px 10px}
+
+/* Cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px;margin-bottom:8px;cursor:grab;user-select:none}
+.card:last-child{margin-bottom:0}.card:active{cursor:grabbing}
+.card.sortable-ghost{opacity:.35;background:var(--surface3)}.card.sortable-chosen{box-shadow:0 6px 20px rgba(0,0,0,.12)}
+.card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:3px;gap:8px}
+.card-ref{font-size:11px;font-weight:700;color:var(--text);letter-spacing:.02em}
+.card-badge{font-size:10px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 6px;white-space:nowrap}
+.card-ar{display:flex;align-items:center;gap:2px}
+.card-customer{font-size:12px;font-weight:500;margin-bottom:8px;color:var(--text)}
+.expand-bar{display:flex;align-items:center;justify-content:space-between;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer}
+.expand-bar:hover{border-color:var(--border2)}
+.expand-left{display:flex;align-items:center;gap:7px}
+.expand-label{font-size:11px;color:var(--text2)}
+.pills{display:flex;gap:3px}
+.pill{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--border2);background:transparent}
+.pill.on{background:var(--text);border-color:var(--text)}
+.chevron{font-size:14px;color:var(--text3);transition:transform .15s}.chevron.open{transform:rotate(180deg)}
+.card-detail{display:none;margin-top:8px}.card-detail.open{display:block}
+.btn-move{width:100%;margin-top:8px;padding:6px;font-size:12px;font-weight:500;border-radius:var(--radius-sm);background:var(--text);color:var(--surface);border:none;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn-move:hover{opacity:.82}
+
+/* Asset blocks */
+.asset-block{margin-bottom:8px;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden}.asset-block:last-child{margin-bottom:0}
+.asset-head{display:flex;align-items:center;justify-content:space-between;padding:6px 9px;background:var(--surface2);gap:8px}
+.asset-name{font-size:10px;font-weight:700;color:var(--text);letter-spacing:.01em}
+.asset-loc{font-size:10px;color:var(--text2);margin-top:1px}
+.asset-status{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text2);white-space:nowrap}
+.s-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.s-all{background:var(--dot-all)}.s-some{background:var(--dot-some)}.s-none{background:var(--border2)}
+
+/* Parts table */
+.pt{width:100%;border-collapse:collapse;font-size:10.5px}
+.pt th{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);text-align:left;padding:5px 7px;border-bottom:1px solid var(--border);background:var(--surface);white-space:nowrap}
+.pt td{padding:5px 7px;color:var(--text);border-bottom:1px solid var(--border);vertical-align:middle}
+.pt tr:last-child td{border-bottom:none}.pt td:last-child{text-align:center}
+.pt input[type=checkbox]{width:15px;height:15px;cursor:pointer;display:block;margin:0 auto;accent-color:var(--text)}
+.bdg{font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;white-space:nowrap;display:inline-block}
+.bdg-stock{background:var(--ok-bg);color:var(--ok-text)}.bdg-order{background:var(--warn-bg);color:var(--warn-text)}
+.eta-wrap{display:flex;align-items:center;gap:4px}
+.spin{animation:rot .8s linear infinite;display:inline-block;font-size:12px}
+@keyframes rot{to{transform:rotate(360deg)}}
+
+/* Modal */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:32px 16px 64px;z-index:50;overflow-y:auto}
+.modal{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border2);padding:22px;width:100%;max-width:440px}
+.modal.wide{max-width:580px}
+.modal h2{font-size:15px;font-weight:700;margin-bottom:18px;display:flex;align-items:center;gap:8px}
+.modal-foot{display:flex;gap:8px;margin-top:18px}.modal-foot button{flex:1;padding:9px}
+
+/* Form */
+.fg{margin-bottom:10px}
+.fg label{font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em}
+.fg input,.fg select,.fg textarea{width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font-family:inherit;font-size:13px}
+.fg input:focus,.fg select:focus,.fg textarea:focus{outline:none;border-color:var(--text3);box-shadow:0 0 0 3px rgba(0,0,0,.06)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sec{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin:16px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.asset-form{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px}
+.asset-form-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.part-form{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px;margin-bottom:8px}
+.part-form-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+
+/* Import */
+.tabs{display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:16px}
+.tab{flex:1;padding:8px;font-size:12px;font-weight:500;border:none;background:transparent;color:var(--text2);display:flex;align-items:center;justify-content:center;gap:5px}
+.tab.on{background:var(--text);color:var(--surface)}
+.drop{border:2px dashed var(--border2);border-radius:var(--radius-sm);padding:32px;text-align:center;color:var(--text2);cursor:pointer}
+.drop i{font-size:36px;color:var(--text3);display:block;margin-bottom:10px}
+.drop:hover,.drop.dragover{border-color:var(--text3);background:var(--surface2)}
+.msg-box{margin-top:12px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;color:var(--text2);text-align:center}
+.wh-block{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px}
+.wh-block-title{font-size:11px;font-weight:700;color:var(--text);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.hint{font-size:11px;color:var(--text3);margin-top:5px;line-height:1.5}
+
+/* Label preview */
+.label-prev{width:336px;height:126px;background:#fff;border:1px solid #ccc;border-radius:4px;display:flex;align-items:center;padding:6px 8px;gap:8px;color:#000;flex-shrink:0}
+.lp-lbl{font-size:6.5pt;color:#888;text-transform:uppercase;letter-spacing:.05em;font-family:Arial,sans-serif;margin-bottom:1px}
+.lp-val{font-size:8pt;font-weight:700;color:#111;line-height:1.2;font-family:Arial,sans-serif}
+.lp-lg{font-size:11pt}
+.lp-date{font-size:6pt;color:#999;margin-top:5px;font-family:Arial,sans-serif}
+
+/* Toasts */
+.toasts{position:fixed;bottom:20px;right:20px;z-index:200;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;max-width:280px;animation:tin .2s ease;pointer-events:auto}
+.toast.ok{border-left:3px solid var(--dot-all)}.toast.err{border-left:3px solid var(--err-text)}.toast.info{border-left:3px solid var(--info-text)}
+@keyframes tin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ── Warehouse view ── */
+#wv{display:none;min-height:100vh;background:var(--bg)}
+.wv-wrap{max-width:520px;margin:0 auto;padding:16px}
+.wv-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.wv-logo{font-size:13px;font-weight:700;color:var(--text2);display:flex;align-items:center;gap:6px}
+.wv-card-head{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px}
+.wv-ref{font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--text2);margin-bottom:3px}
+.wv-customer{font-size:17px;font-weight:700;color:var(--text);margin-bottom:2px}
+.wv-transfer{font-size:12px;color:var(--text2)}
+.wv-progress{margin-top:10px;background:var(--surface3);border-radius:20px;height:6px;overflow:hidden}
+.wv-progress-bar{height:100%;background:var(--dot-all);border-radius:20px;transition:width .3s}
+.wv-prog-label{font-size:11px;color:var(--text2);margin-top:5px}
+.wv-asset{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px;overflow:hidden}
+.wv-asset-head{background:var(--surface2);padding:10px 16px;border-bottom:1px solid var(--border)}
+.wv-asset-name{font-size:12px;font-weight:700;color:var(--text)}
+.wv-asset-loc{font-size:11px;color:var(--text2);margin-top:1px}
+.wv-asset-prog{font-size:11px;display:flex;align-items:center;gap:5px;margin-top:4px}
+.wv-part{display:flex;align-items:center;gap:14px;padding:14px 16px;border-bottom:1px solid var(--border);transition:background .15s}
+.wv-part:last-child{border-bottom:none}
+.wv-part.done-row{opacity:.55}
+.wv-chk{width:26px;height:26px;flex-shrink:0;accent-color:var(--text);cursor:pointer}
+.wv-info{flex:1;min-width:0}
+.wv-pname{font-size:14px;font-weight:500;color:var(--text)}
+.wv-pmeta{font-size:11px;color:var(--text2);margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.wv-done-lbl{text-decoration:line-through;opacity:.6}
+.wv-saved{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--dot-all);color:#fff;padding:8px 20px;border-radius:20px;font-size:12px;font-weight:600;opacity:0;transition:opacity .3s;pointer-events:none}
+.wv-saved.show{opacity:1}
+.wv-not-found{padding:60px 20px;text-align:center;color:var(--text2)}
+.wv-not-found i{font-size:48px;display:block;margin-bottom:16px;color:var(--text3)}
+</style>
+</head>
+<body>
+
+<!-- Board header -->
+<header class="header" id="main-hdr">
+  <div class="header-left">
+    <i class="ti ti-packages" style="font-size:20px;color:var(--text2)"></i>
+    <h1>Parts Tracker</h1>
+    <span class="hpill" id="total-pill">0 cards</span>
+    <span class="sync-dot" id="sync-dot" title="Cloud sync status"></span>
+  </div>
+  <div class="header-actions">
+    <button class="btn" onclick="openImport()"><i class="ti ti-sparkles"></i>Import</button>
+    <button class="btn-icon" onclick="pullFromCloud(true)" title="Sync from cloud"><i class="ti ti-refresh"></i></button>
+    <button class="btn-icon" onclick="openSettings()" title="Settings"><i class="ti ti-settings"></i></button>
+  </div>
+</header>
+
+<div class="board" id="board"></div>
+
+<!-- Warehouse view (shown when ?view=X) -->
+<div id="wv">
+  <div class="wv-wrap" id="wv-content"></div>
+  <div class="wv-saved" id="wv-saved">Saved ✓</div>
+</div>
+
+<div id="modal"></div>
+<div class="toasts" id="toasts"></div>
+
+<script>
+// ── Columns ───────────────────────────────────────────────────────────────────
+const COLS=[
+  {id:'c0',label:'Parts to order'},
+  {id:'c1',label:'Ordered – awaiting arrival'},
+  {id:'c2',label:'In stock – transfer needed'},
+  {id:'c3',label:'Ready to schedule'}
+];
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let S={
+  cards:{},cols:{c0:[],c1:[],c2:[],c3:[]},lastModified:0,
+  cfg:{
+    apiKey:'',appUrl:'',
+    jsonbin:{key:'',binId:''},
+    sage:{url:'',token:'',dateField:'requestedDeliveryDate'},
+    hooks:{c1:{url:'',to:''},c2:{url:'',to:''},c3:{url:'',to:''}}
+  }
+};
+
+// ── Local persist ─────────────────────────────────────────────────────────────
+function saveLocal(){try{localStorage.setItem('pt3',JSON.stringify(S));}catch(e){}}
+function loadLocal(){try{const r=localStorage.getItem('pt3');if(r)S=JSON.parse(r);}catch(e){}}
+
+// ── Cloud sync (JSONBin) ──────────────────────────────────────────────────────
+function setSyncDot(state){
+  const d=document.getElementById('sync-dot');
+  if(d){d.className='sync-dot '+(state||'');}
+}
+
+async function pushToCloud(){
+  const jb=S.cfg.jsonbin;
+  if(!jb||!jb.key)return;
+  setSyncDot('busy');
+  try{
+    S.lastModified=Date.now();
+    const payload={cards:S.cards,cols:S.cols,lastModified:S.lastModified};
+    let url,method;
+    if(jb.binId){
+      url=`https://api.jsonbin.io/v3/b/${jb.binId}`;method='PUT';
+    }else{
+      url='https://api.jsonbin.io/v3/b';method='POST';
+    }
+    const res=await fetch(url,{method,
+      headers:{'Content-Type':'application/json','X-Master-Key':jb.key,'X-Bin-Name':'PartsTracker'},
+      body:JSON.stringify(payload)
+    });
+    const data=await res.json();
+    if(method==='POST'&&data.metadata?.id){
+      S.cfg.jsonbin.binId=data.metadata.id;
+      saveLocal();
+      toast('Cloud storage created — bin ID saved','ok');
+    }
+    setSyncDot('ok');
+  }catch(e){
+    setSyncDot('err');
+    console.warn('Cloud push failed:',e);
+  }
+}
+
+async function pullFromCloud(showToast=false){
+  const jb=S.cfg.jsonbin;
+  if(!jb||!jb.key||!jb.binId){
+    if(showToast)toast('Set up JSONBin in Settings to enable cloud sync','info');
+    return null;
+  }
+  setSyncDot('busy');
+  try{
+    const res=await fetch(`https://api.jsonbin.io/v3/b/${jb.binId}/latest`,{
+      headers:{'X-Master-Key':jb.key}
+    });
+    const data=await res.json();
+    const remote=data.record;
+    if(remote&&remote.lastModified>(S.lastModified||0)){
+      S.cards=remote.cards||{};
+      S.cols=remote.cols||{c0:[],c1:[],c2:[],c3:[]};
+      S.lastModified=remote.lastModified;
+      saveLocal();
+      if(showToast)toast('Board updated from cloud','ok');
+      setSyncDot('ok');
+      return remote;
+    }
+    setSyncDot('ok');
+    if(showToast)toast('Already up to date','info');
+    return null;
+  }catch(e){
+    setSyncDot('err');
+    if(showToast)toast('Cloud sync failed — check JSONBin key','err');
+    return null;
+  }
+}
+
+async function save(){
+  saveLocal();
+  await pushToCloud();
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function cardProg(card){let d=0,t=0;(card.assets||[]).forEach(a=>(a.parts||[]).forEach(p=>{t++;if(p.done)d++;}));return{done:d,total:t}}
+function assetProg(a){const d=(a.parts||[]).filter(p=>p.done).length;return{done:d,total:(a.parts||[]).length}}
+function totalCards(){return Object.keys(S.cards).length}
+
+function toast(msg,type='info'){
+  const el=document.createElement('div');
+  el.className=`toast ${type}`;el.textContent=msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(()=>el.remove(),3800);
+}
+
+// ── Webhook ───────────────────────────────────────────────────────────────────
+function fireHook(colId,card){
+  const h=S.cfg.hooks?.[colId];if(!h?.url)return;
+  const col=COLS.find(c=>c.id===colId);
+  fetch(h.url,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({stage:col.label,ref:card.ref,transfer:card.transfer,customer:card.customer,notify:h.to,
+      assets:(card.assets||[]).map(a=>({asset:`${a.no} | ${a.desc} | ${a.location}`,parts:(a.parts||[]).map(p=>`${p.name} x${p.qty}`)}))})
+  }).then(()=>toast(`Alert sent for ${card.ref}`,'ok')).catch(()=>toast('Webhook failed','err'));
+}
+
+// ── Sage 200 ETA ──────────────────────────────────────────────────────────────
+async function fetchETA(cardId,colId,ai,pi){
+  const part=S.cards[cardId].assets[ai].parts[pi];
+  const sg=S.cfg.sage||{};
+  if(!sg.url||!sg.token){toast('Set up Sage 200 in Settings first','err');return}
+  if(part.type!=='order'||!part.ref||part.ref==='—'){toast('No PO number on this line','err');return}
+  const cell=document.getElementById(`eta-${cardId}-${ai}-${pi}`);
+  if(cell)cell.innerHTML='<i class="ti ti-refresh spin"></i>';
+  try{
+    const res=await fetch(`${sg.url.replace(/\/$/,'')}/purchaseOrders?$filter=DocumentNo eq '${encodeURIComponent(part.ref)}'`,
+      {headers:{'Authorization':`Bearer ${sg.token}`,'Accept':'application/json'}});
+    if(!res.ok)throw new Error(`HTTP ${res.status}`);
+    const data=await res.json();
+    const orders=data.value||data||[];
+    if(!orders.length){toast(`No PO found for ${part.ref}`,'err');refreshCard(cardId,colId);return}
+    const field=sg.dateField||'requestedDeliveryDate';
+    const dateVal=orders[0][field]||(orders[0].lines||[])[0]?.[field];
+    if(!dateVal){toast(`No promise date found — check field name in Settings`,'err');refreshCard(cardId,colId);return}
+    const formatted=new Date(dateVal).toLocaleDateString('en-GB');
+    S.cards[cardId].assets[ai].parts[pi].eta=formatted;
+    await save();refreshCard(cardId,colId);
+    toast(`ETA updated: ${formatted}`,'ok');
+  }catch(e){
+    toast(`Sage 200 error: ${e.message}`,'err');refreshCard(cardId,colId);
+  }
+}
+
+// ── Render board ──────────────────────────────────────────────────────────────
+function render(){
+  const board=document.getElementById('board');board.innerHTML='';let total=0;
+  COLS.forEach(col=>{
+    const ids=S.cols[col.id]||[];total+=ids.length;
+    const colEl=document.createElement('div');colEl.className='col';
+    colEl.innerHTML=`
+      <div class="col-head"><span class="col-title">${col.label}</span><span class="col-count" id="cnt-${col.id}">${ids.length}</span></div>
+      <div class="col-body" id="cb-${col.id}" data-col="${col.id}">${ids.map(id=>cardHtml(S.cards[id],col.id)).join('')}</div>
+      <div class="col-foot"><button class="btn-ghost" onclick="openAdd('${col.id}')"><i class="ti ti-plus" style="font-size:14px"></i> add card</button></div>`;
+    board.appendChild(colEl);
+  });
+  document.getElementById('total-pill').textContent=`${total} card${total===1?'':'s'}`;
+  initSort();
+}
+
+function cardHtml(card,colId){
+  if(!card)return'';
+  const{done,total}=cardProg(card);
+  const pills=(card.assets||[]).flatMap(a=>(a.parts||[]).map(p=>`<span class="pill ${p.done?'on':''}"></span>`)).join('');
+  const allDone=total>0&&done===total;
+  const ci=COLS.findIndex(c=>c.id===colId);const next=COLS[ci+1];
+  const hasSage=!!(S.cfg.sage?.url&&S.cfg.sage?.token);
+
+  const assetBlocks=(card.assets||[]).map((a,ai)=>{
+    const{done:ad,total:at}=assetProg(a);
+    const dotCls=ad===at&&at>0?'s-all':ad>0?'s-some':'s-none';
+    const rows=(a.parts||[]).map((p,pi)=>{
+      const etaCell=p.type==='order'&&hasSage
+        ?`<div class="eta-wrap" id="eta-${card.id}-${ai}-${pi}"><span style="font-size:10px;color:var(--text2)">${p.eta||'—'}</span><button class="ic-btn" title="Refresh ETA from Sage 200" onclick="event.stopPropagation();fetchETA('${card.id}','${colId}',${ai},${pi})"><i class="ti ti-refresh"></i></button></div>`
+        :`<span style="font-size:10px;color:var(--text2)">${p.eta||'—'}</span>`;
+      return`<tr>
+        <td style="color:var(--text2);font-size:10px">${esc(p.code)}</td>
+        <td>${esc(p.name)}</td><td style="text-align:center">${p.qty}</td>
+        <td><span class="bdg ${p.type==='stock'?'bdg-stock':'bdg-order'}">${p.type==='stock'?'In stock':'To order'}</span></td>
+        <td style="font-size:10px">${esc(p.ref)||'—'}</td>
+        <td>${etaCell}</td>
+        <td><input type="checkbox" ${p.done?'checked':''} onchange="tick('${card.id}','${colId}',${ai},${pi},this.checked)"></td>
+      </tr>`;
+    }).join('');
+    return`<div class="asset-block">
+      <div class="asset-head">
+        <div><div class="asset-name">${esc(a.no)} · ${esc(a.desc)}</div><div class="asset-loc">${esc(a.location)}</div></div>
+        <div class="asset-status"><span class="s-dot ${dotCls}"></span>${ad===at&&at>0?'All done':`${ad} / ${at}`}</div>
+      </div>
+      <table class="pt"><thead><tr><th>Code</th><th>Name</th><th>Qty</th><th>PO/Stock</th><th>Ref/PO no.</th><th>ETA</th><th>Done</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    </div>`;
+  }).join('');
+
+  return`<div class="card" data-id="${card.id}" data-col="${colId}">
+    <div class="card-top">
+      <span class="card-ref">${esc(card.ref)}</span>
+      <div class="card-ar">
+        <span class="card-badge">Transfer ${esc(card.transfer)}</span>
+        <button class="ic-btn" onclick="event.stopPropagation();openLabel('${card.id}','${colId}')" title="QR label"><i class="ti ti-qrcode"></i></button>
+        <button class="ic-btn" onclick="event.stopPropagation();editCard('${card.id}','${colId}')" title="Edit"><i class="ti ti-pencil"></i></button>
+      </div>
+    </div>
+    <div class="card-customer">${esc(card.customer)}</div>
+    <div class="expand-bar" onclick="toggleExp('${card.id}','${colId}')">
+      <div class="expand-left"><div class="pills">${pills}</div><span class="expand-label">${done} of ${total} complete</span></div>
+      <i class="ti ti-chevron-down chevron ${card.expanded?'open':''}"></i>
+    </div>
+    <div class="card-detail ${card.expanded?'open':''}"><div style="margin-top:8px">${assetBlocks}</div></div>
+    ${allDone&&next?`<button class="btn-move" onclick="moveCard('${card.id}','${colId}','${next.id}')"><i class="ti ti-arrow-right" style="font-size:14px"></i> ${next.label}</button>`:''}
+  </div>`;
+}
+
+// ── Sortable ──────────────────────────────────────────────────────────────────
+let _sort=[];
+function initSort(){
+  _sort.forEach(s=>{try{s.destroy();}catch(e){}});_sort=[];
+  COLS.forEach(col=>{
+    const el=document.getElementById(`cb-${col.id}`);if(!el)return;
+    _sort.push(Sortable.create(el,{group:'cards',animation:140,ghostClass:'sortable-ghost',chosenClass:'sortable-chosen',
+      onEnd(evt){
+        const id=evt.item.dataset.id,from=evt.from.dataset.col,to=evt.to.dataset.col;
+        COLS.forEach(c=>{const b=document.getElementById(`cb-${c.id}`);if(b)S.cols[c.id]=[...b.querySelectorAll('.card')].map(e=>e.dataset.id);});
+        if(from!==to){S.cards[id].expanded=false;fireHook(to,S.cards[id]);}
+        COLS.forEach(c=>{const cnt=document.getElementById(`cnt-${c.id}`);if(cnt)cnt.textContent=(S.cols[c.id]||[]).length;});
+        document.getElementById('total-pill').textContent=`${totalCards()} cards`;
+        const moved=document.querySelector(`[data-id="${id}"]`);
+        if(moved)moved.outerHTML=cardHtml(S.cards[id],to);
+        save();
+      }
+    }));
+  });
+}
+
+// ── Card actions ──────────────────────────────────────────────────────────────
+function toggleExp(id,colId){S.cards[id].expanded=!S.cards[id].expanded;saveLocal();refreshCard(id,colId)}
+async function tick(id,colId,ai,pi,val){S.cards[id].assets[ai].parts[pi].done=val;await save();refreshCard(id,colId)}
+function refreshCard(id,colId){const el=document.querySelector(`[data-id="${id}"]`);if(el)el.outerHTML=cardHtml(S.cards[id],colId)}
+async function moveCard(id,from,to){
+  S.cols[from]=(S.cols[from]||[]).filter(i=>i!==id);
+  S.cols[to]=[...(S.cols[to]||[]),id];
+  S.cards[id].expanded=false;
+  fireHook(to,S.cards[id]);
+  await save();render();
+}
+
+// ── QR Label ─────────────────────────────────────────────────────────────────
+function openLabel(cardId,colId){
+  const card=S.cards[cardId];
+  const appUrl=(S.cfg.appUrl||'').replace(/\/$/,'');
+  const hasUrl=!!appUrl;
+  const qrUrl=hasUrl?`${appUrl}?view=${cardId}`:`${card.ref} · ${card.customer} · Transfer ${card.transfer}`;
+  const today=new Date().toLocaleDateString('en-GB');
+  const hasCloud=!!(S.cfg.jsonbin?.key&&S.cfg.jsonbin?.binId);
+
+  setModal(`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal wide">
+    <h2><i class="ti ti-qrcode"></i>QR label</h2>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Label preview</div>
+        <div class="label-prev">
+          <div id="qr-box" style="flex-shrink:0;width:110px;height:110px;display:flex;align-items:center;justify-content:center"></div>
+          <div style="flex:1;overflow:hidden">
+            <div class="lp-lbl">Site / customer</div>
+            <div class="lp-val">${card.customer}</div>
+            <div class="lp-lbl" style="margin-top:6px">Quote ref</div>
+            <div class="lp-val lp-lg">${card.ref}</div>
+            <div class="lp-lbl" style="margin-top:4px">Transfer no.</div>
+            <div class="lp-val">${card.transfer}</div>
+            <div class="lp-date">Printed ${today}</div>
+          </div>
+        </div>
+      </div>
+      <div style="flex:1;min-width:180px">
+        <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">When scanned</div>
+        ${hasUrl&&hasCloud
+          ?`<div style="font-size:12px;color:var(--text2);line-height:1.7">Opens a <strong style="color:var(--text)">live card view</strong> on the warehouse phone. Parts can be ticked off and the update syncs back to the board automatically via cloud.</div>`
+          :hasUrl
+            ?`<div class="msg-box" style="text-align:left;font-size:12px">App URL is set ✓<br>But no JSONBin cloud sync — ticks made on phones won't sync back.<br><br>Add JSONBin credentials in Settings to enable live updates.</div>`
+            :`<div class="msg-box" style="text-align:left;font-size:12px">No App URL set. The QR code contains the quote ref and customer name only — good for box ID but won't open a digital view.<br><br>Set App URL in Settings to enable phone scanning.</div>`
+        }
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">Close</button>
+      <button class="btn btn-primary" onclick="printLabel('${cardId}')"><i class="ti ti-printer"></i>Print Dymo label</button>
+    </div>
+  </div></div>`);
+
+  setTimeout(()=>{
+    const el=document.getElementById('qr-box');if(!el)return;
+    try{new QRCode(el,{text:qrUrl,width:110,height:110,correctLevel:QRCode.CorrectLevel.M});}
+    catch(e){el.innerHTML='<div style="font-size:10px;color:red">QR error</div>';}
+  },60);
+}
+
+function printLabel(cardId){
+  const card=S.cards[cardId];
+  const appUrl=(S.cfg.appUrl||'').replace(/\/$/,'');
+  const qrUrl=appUrl?`${appUrl}?view=${cardId}`:`${card.ref} · ${card.customer}`;
+  const today=new Date().toLocaleDateString('en-GB');
+  const win=window.open('','_blank','width=500,height=300');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+  <style>
+    @page{size:89mm 36mm;margin:0}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{width:89mm;height:36mm;overflow:hidden;font-family:Arial,Helvetica,sans-serif}
+    .l{display:flex;align-items:center;width:89mm;height:36mm;padding:2mm 2.5mm;gap:2mm}
+    #qr{flex-shrink:0;width:30mm;height:30mm}
+    #qr img,#qr canvas{width:30mm!important;height:30mm!important}
+    .info{flex:1;overflow:hidden}
+    .lb{font-size:5pt;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.4mm}
+    .vl{font-size:7pt;font-weight:700;color:#000;line-height:1.2;margin-bottom:1.5mm}
+    .vl.lg{font-size:10pt}
+    .dt{font-size:5pt;color:#999;margin-top:1mm}
+  </style></head><body>
+  <div class="l">
+    <div id="qr"></div>
+    <div class="info">
+      <div class="lb">Site</div><div class="vl">${card.customer}</div>
+      <div class="lb">Quote ref</div><div class="vl lg">${card.ref}</div>
+      <div class="lb">Transfer no.</div><div class="vl">${card.transfer}</div>
+      <div class="dt">Printed ${today}</div>
+    </div>
+  </div>
+  <script>
+    new QRCode(document.getElementById('qr'),{text:${JSON.stringify(qrUrl)},width:113,height:113,correctLevel:QRCode.CorrectLevel.M});
+    setTimeout(()=>window.print(),400);
+  <\/script></body></html>`);
+  win.document.close();
+}
+
+// ── Warehouse view ────────────────────────────────────────────────────────────
+async function showWarehouseView(cardId){
+  document.getElementById('main-hdr').style.display='none';
+  document.getElementById('board').style.display='none';
+  document.getElementById('wv').style.display='block';
+
+  // Try to get latest from cloud first
+  const remote=await pullFromCloud(false);
+
+  const card=S.cards[cardId];
+  const wvc=document.getElementById('wv-content');
+
+  if(!card){
+    wvc.innerHTML=`<div class="wv-not-found">
+      <i class="ti ti-wifi-off"></i>
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px">Card not found</div>
+      <div style="font-size:13px;color:var(--text3)">Make sure cloud sync (JSONBin) is set up and this device is on the same network as the main board.</div>
+    </div>`;
+    return;
+  }
+
+  renderWarehouseCard(cardId);
+}
+
+function renderWarehouseCard(cardId){
+  const card=S.cards[cardId];
+  const{done,total}=cardProg(card);
+  const pct=total>0?Math.round(done/total*100):0;
+
+  const assetBlocks=(card.assets||[]).map((a,ai)=>{
+    const{done:ad,total:at}=assetProg(a);
+    const parts=(a.parts||[]).map((p,pi)=>`
+      <div class="wv-part ${p.done?'done-row':''}" id="wvrow-${ai}-${pi}">
+        <input type="checkbox" class="wv-chk" ${p.done?'checked':''} onchange="wvTick('${cardId}',${ai},${pi},this)">
+        <div class="wv-info">
+          <div class="wv-pname ${p.done?'wv-done-lbl':''}">${esc(p.name)}</div>
+          <div class="wv-pmeta">
+            <span>${esc(p.code)}</span>
+            <span>Qty: ${p.qty}</span>
+            <span class="bdg ${p.type==='stock'?'bdg-stock':'bdg-order'}">${p.type==='stock'?'In stock':'To order'}</span>
+            ${p.eta?`<span>ETA: ${p.eta}</span>`:''}
+          </div>
+        </div>
+      </div>`).join('');
+    return`<div class="wv-asset">
+      <div class="wv-asset-head">
+        <div class="wv-asset-name">${esc(a.no)} · ${esc(a.desc)}</div>
+        <div class="wv-asset-loc">${esc(a.location)}</div>
+        <div class="wv-asset-prog"><span class="s-dot ${ad===at&&at>0?'s-all':ad>0?'s-some':'s-none'}"></span>${ad===at&&at>0?'All done':`${ad} of ${at} done`}</div>
+      </div>
+      ${parts}
+    </div>`;
+  }).join('');
+
+  document.getElementById('wv-content').innerHTML=`
+    <div class="wv-topbar">
+      <div class="wv-logo"><i class="ti ti-packages"></i>Parts Tracker</div>
+      <span class="sync-dot ${S.cfg.jsonbin?.key?'ok':''}" id="wv-sync-dot" title="Sync status"></span>
+    </div>
+    <div class="wv-card-head">
+      <div class="wv-ref">${esc(card.ref)} · Transfer ${esc(card.transfer)}</div>
+      <div class="wv-customer">${esc(card.customer)}</div>
+      <div class="wv-transfer">${(card.assets||[]).map(a=>`${a.no} · ${a.desc}`).join(', ')}</div>
+      <div class="wv-progress"><div class="wv-progress-bar" id="wv-pbar" style="width:${pct}%"></div></div>
+      <div class="wv-prog-label" id="wv-prog-label">${done} of ${total} parts confirmed</div>
+    </div>
+    ${assetBlocks}
+    <div style="height:40px"></div>`;
+}
+
+async function wvTick(cardId,ai,pi,chk){
+  S.cards[cardId].assets[ai].parts[pi].done=chk.checked;
+  // Update row style immediately
+  const row=document.getElementById(`wvrow-${ai}-${pi}`);
+  if(row){
+    row.className='wv-part'+(chk.checked?' done-row':'');
+    const nm=row.querySelector('.wv-pname');
+    if(nm)nm.className='wv-pname'+(chk.checked?' wv-done-lbl':'');
+  }
+  // Update progress
+  const{done,total}=cardProg(S.cards[cardId]);
+  const pct=total>0?Math.round(done/total*100):0;
+  const pbar=document.getElementById('wv-pbar');if(pbar)pbar.style.width=pct+'%';
+  const plbl=document.getElementById('wv-prog-label');if(plbl)plbl.textContent=`${done} of ${total} parts confirmed`;
+  // Update asset status dots
+  (S.cards[cardId].assets||[]).forEach((a,aIdx)=>{
+    const{done:ad,total:at}=assetProg(a);
+    // No per-row dot update needed — card is already visually updated
+  });
+  // Save to cloud
+  setSyncDot('busy');const dot=document.getElementById('wv-sync-dot');if(dot)dot.className='sync-dot busy';
+  await save();
+  // Show saved flash
+  const sv=document.getElementById('wv-saved');
+  if(sv){sv.classList.add('show');setTimeout(()=>sv.classList.remove('show'),1800);}
+  if(dot)dot.className='sync-dot ok';
+}
+
+// ── Add / Edit form ───────────────────────────────────────────────────────────
+let FD={};
+
+function openAdd(colId,pre=null){
+  FD=pre||{colId,ref:'',transfer:'',customer:'',assets:[{no:'',desc:'',location:'',parts:[{code:'',name:'',qty:1,type:'order',ref:'',eta:''}]}]};
+  FD.colId=FD.colId||colId;renderAdd();
+}
+
+function editCard(id,colId){
+  const c=S.cards[id];if(!c)return;
+  FD={_editId:id,_editCol:colId,colId,
+    ref:c.ref==='—'?'':c.ref,transfer:c.transfer==='—'?'':c.transfer,customer:c.customer==='—'?'':c.customer,
+    assets:(c.assets||[]).map(a=>({no:a.no==='—'?'':a.no,desc:a.desc==='—'?'':a.desc,location:a.location==='—'?'':a.location,
+      parts:(a.parts||[]).map(p=>({code:p.code==='—'?'':p.code,name:p.name==='—'?'':p.name,qty:p.qty,type:p.type,ref:p.ref==='—'?'':p.ref,eta:p.eta||'',done:p.done}))
+    }))
+  };
+  renderAdd();
+}
+
+function renderAdd(){
+  const aForms=(FD.assets||[]).map((a,ai)=>`
+    <div class="asset-form">
+      <div class="asset-form-head"><span style="font-size:12px;font-weight:700">Asset ${ai+1}</span>${(FD.assets||[]).length>1?`<button class="btn-danger" onclick="rmA(${ai})">×</button>`:''}</div>
+      <div class="g2">
+        <div class="fg"><label>Asset number</label><input value="${esc(a.no)}" oninput="FD.assets[${ai}].no=this.value" placeholder="e.g. 23100001150"/></div>
+        <div class="fg"><label>Location</label><input value="${esc(a.location)}" oninput="FD.assets[${ai}].location=this.value" placeholder="e.g. Ward 2"/></div>
+      </div>
+      <div class="fg"><label>Description</label><input value="${esc(a.desc)}" oninput="FD.assets[${ai}].desc=this.value" placeholder="e.g. Oxford Major 200"/></div>
+      <div class="sec" style="margin-top:12px">Parts<button class="btn-danger" style="font-size:12px;font-weight:600;color:var(--text2)" onclick="addP(${ai})">+ add</button></div>
+      ${(a.parts||[]).map((p,pi)=>`<div class="part-form">
+        <div class="part-form-head"><span style="font-size:11px;font-weight:600;color:var(--text2)">Part ${pi+1}</span>${(a.parts||[]).length>1?`<button class="btn-danger" onclick="rmP(${ai},${pi})">×</button>`:''}</div>
+        <div class="g2">
+          <div class="fg"><label>Code</label><input value="${esc(p.code)}" oninput="FD.assets[${ai}].parts[${pi}].code=this.value" placeholder="Part no."/></div>
+          <div class="fg"><label>Qty</label><input type="number" min="1" value="${p.qty}" oninput="FD.assets[${ai}].parts[${pi}].qty=+this.value"/></div>
+        </div>
+        <div class="fg"><label>Name</label><input value="${esc(p.name)}" oninput="FD.assets[${ai}].parts[${pi}].name=this.value"/></div>
+        <div class="g2">
+          <div class="fg"><label>PO or in stock?</label><select onchange="FD.assets[${ai}].parts[${pi}].type=this.value"><option value="order" ${p.type==='order'?'selected':''}>To order</option><option value="stock" ${p.type==='stock'?'selected':''}>In stock</option></select></div>
+          <div class="fg"><label>Transfer / PO no.</label><input value="${esc(p.ref)}" oninput="FD.assets[${ai}].parts[${pi}].ref=this.value"/></div>
+        </div>
+        <div class="fg"><label>ETA</label><input type="date" value="${p.eta||''}" oninput="FD.assets[${ai}].parts[${pi}].eta=this.value"/></div>
+      </div>`).join('')}
+    </div>`).join('');
+
+  setModal(`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal wide">
+    <h2><i class="ti ti-${FD._editId?'pencil':'file-plus'}"></i>${FD._editId?'Edit card':'Add card'}</h2>
+    <div class="g2">
+      <div class="fg"><label>Quote / job ref</label><input value="${esc(FD.ref||'')}" oninput="FD.ref=this.value" placeholder="QUO01803"/></div>
+      <div class="fg"><label>Transfer no.</label><input value="${esc(FD.transfer||'')}" oninput="FD.transfer=this.value" placeholder="373"/></div>
+    </div>
+    <div class="fg"><label>Customer name</label><input value="${esc(FD.customer||'')}" oninput="FD.customer=this.value"/></div>
+    <div class="fg"><label>Column</label><select onchange="FD.colId=this.value">${COLS.map(c=>`<option value="${c.id}" ${c.id===FD.colId?'selected':''}>${c.label}</option>`).join('')}</select></div>
+    <div class="sec">Assets<button class="btn-danger" style="font-size:12px;font-weight:600;color:var(--text2)" onclick="addA()">+ add</button></div>
+    ${aForms}
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCard()">${FD._editId?'Save changes':'Add card'}</button>
+    </div>
+  </div></div>`);
+}
+
+function addA(){(FD.assets=FD.assets||[]).push({no:'',desc:'',location:'',parts:[{code:'',name:'',qty:1,type:'order',ref:'',eta:''}]});renderAdd()}
+function rmA(ai){FD.assets.splice(ai,1);renderAdd()}
+function addP(ai){(FD.assets[ai].parts=FD.assets[ai].parts||[]).push({code:'',name:'',qty:1,type:'order',ref:'',eta:''});renderAdd()}
+function rmP(ai,pi){FD.assets[ai].parts.splice(pi,1);renderAdd()}
+
+async function saveCard(){
+  const isEdit=!!FD._editId;const id=isEdit?FD._editId:uid();
+  const newAssets=(FD.assets||[]).map(a=>({no:a.no||'—',desc:a.desc||'Asset',location:a.location||'—',
+    parts:(a.parts||[]).map(p=>({code:p.code||'—',name:p.name||'Part',qty:p.qty||1,type:p.type||'order',ref:p.ref||'—',eta:p.eta||'',done:p.done||false}))}));
+  if(isEdit){
+    S.cards[id]={...S.cards[id],ref:FD.ref||'—',transfer:FD.transfer||'—',customer:FD.customer||'—',assets:newAssets};
+    if(FD._editCol!==FD.colId){S.cols[FD._editCol]=(S.cols[FD._editCol]||[]).filter(i=>i!==id);S.cols[FD.colId]=[...(S.cols[FD.colId]||[]),id];}
+  }else{
+    S.cards[id]={id,ref:FD.ref||'—',transfer:FD.transfer||'—',customer:FD.customer||'—',expanded:false,assets:newAssets};
+    S.cols[FD.colId]=[...(S.cols[FD.colId]||[]),id];
+  }
+  await save();closeModal();render();
+  toast(`${S.cards[id].ref} ${isEdit?'updated':'added'}`,'ok');
+}
+
+// ── AI Import ─────────────────────────────────────────────────────────────────
+let IMP={tab:'upload',text:'',msg:''};
+function openImport(){IMP={tab:'upload',text:'',msg:''};renderImport()}
+
+function renderImport(){
+  setModal(`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal wide">
+    <h2><i class="ti ti-sparkles"></i>Import from document</h2>
+    <div class="tabs">
+      <button class="tab ${IMP.tab==='upload'?'on':''}" onclick="IMP.tab='upload';renderImport()"><i class="ti ti-upload"></i>Upload file</button>
+      <button class="tab ${IMP.tab==='paste'?'on':''}" onclick="IMP.tab='paste';renderImport()"><i class="ti ti-clipboard-text"></i>Paste text</button>
+    </div>
+    ${IMP.tab==='upload'?`
+      <div class="drop" onclick="document.getElementById('fi').click()"
+           ondragover="event.preventDefault();this.classList.add('dragover')"
+           ondragleave="this.classList.remove('dragover')"
+           ondrop="event.preventDefault();this.classList.remove('dragover');handleFile(event.dataTransfer.files[0])">
+        <i class="ti ti-file-text"></i>
+        <div style="font-weight:600;margin-bottom:4px">Click to upload or drag file here</div>
+        <div style="font-size:12px;color:var(--text3)">Supports .docx and .txt</div>
+      </div>
+      <input type="file" id="fi" accept=".docx,.txt" style="display:none" onchange="handleFile(this.files[0])">
+    `:`<div class="fg"><label>Paste quote text</label>
+      <textarea rows="9" style="resize:vertical;font-size:12px" oninput="IMP.text=this.value">${esc(IMP.text)}</textarea>
+    </div>`}
+    ${IMP.msg?`<div class="msg-box">${IMP.msg}</div>`:''}
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="runImport()"><i class="ti ti-sparkles"></i>Extract with AI</button>
+    </div>
+  </div></div>`);
+}
+
+function handleFile(file){
+  if(!file)return;IMP.msg='Reading file…';renderImport();
+  if(file.name.endsWith('.docx')){
+    const r=new FileReader();
+    r.onload=async e=>{try{const res=await mammoth.extractRawText({arrayBuffer:e.target.result});IMP.text=res.value;IMP.msg=`✓ ${IMP.text.length} characters read — click Extract`;}catch(e){IMP.msg='Could not read file — try pasting the text';}renderImport();};
+    r.readAsArrayBuffer(file);
+  }else{const r=new FileReader();r.onload=e=>{IMP.text=e.target.result;IMP.msg='✓ File loaded — click Extract';renderImport();};r.readAsText(file);}
+}
+
+async function runImport(){
+  if(!S.cfg.apiKey){toast('Add Anthropic API key in Settings','err');return}
+  if(!IMP.text.trim()){toast('No text to import','err');return}
+  IMP.msg='AI reading the document…';renderImport();
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':S.cfg.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:2000,messages:[{role:'user',content:`Extract parts request data. Return ONLY valid JSON.
+{"ref":"quote ref","transfer":"transfer no or empty","customer":"customer + site name","assets":[{"no":"asset no","desc":"description","location":"location","parts":[{"code":"part code","name":"description","qty":1,"type":"order or stock","ref":"PO no or bin ref","eta":""}]}]}
+type=stock if supplier says Stock. qty must be number. eta always "".
+Document:\n${IMP.text}`}]})
+    });
+    const data=await res.json();if(data.error)throw new Error(data.error.message);
+    const parsed=JSON.parse(data.content.map(c=>c.text||'').join('').replace(/```json|```/g,'').trim());
+    closeModal();openAdd('c0',{...parsed,colId:'c0',assets:parsed.assets||[]});
+    toast('Extracted — check details and click Add card','ok');
+  }catch(e){IMP.msg=`Error: ${e.message}`;renderImport()}
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+function openSettings(){
+  const jb=S.cfg.jsonbin||{};const sg=S.cfg.sage||{};const h=S.cfg.hooks||{};
+  setModal(`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal wide" style="max-height:90vh;overflow-y:auto">
+    <h2><i class="ti ti-settings"></i>Settings</h2>
+
+    <div class="sec">AI import</div>
+    <div class="fg"><label>Anthropic API key</label><input type="password" id="sak" value="${esc(S.cfg.apiKey||'')}" placeholder="sk-ant-…"/>
+    <div class="hint">Get one free at console.anthropic.com — stored in your browser only</div></div>
+
+    <div class="sec">Cloud sync &amp; QR warehouse view</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.6">
+      Cloud sync lets warehouse phones update cards in real time when they scan a QR code.<br>
+      <strong>Step 1:</strong> Create a free account at <a href="https://jsonbin.io" target="_blank">jsonbin.io</a> and get an API key.<br>
+      <strong>Step 2:</strong> Enter the key below — the app creates a storage bin automatically on first save.<br>
+      <strong>Step 3:</strong> Host this HTML file somewhere phones can reach (local IIS, shared drive, or free via GitHub Pages) and enter the URL below.
+    </div>
+    <div class="g2">
+      <div class="fg"><label>JSONBin API key</label><input type="password" id="jbk" value="${esc(jb.key||'')}" placeholder="$2a$…"/></div>
+      <div class="fg"><label>Bin ID <span style="font-weight:400;text-transform:none">(auto-created)</span></label><input id="jbi" value="${esc(jb.binId||'')}" placeholder="auto-generated on first save" readonly style="color:var(--text3)"/></div>
+    </div>
+    <div class="fg"><label>App URL <span style="font-weight:400;text-transform:none">(where this file is hosted)</span></label>
+      <input id="surl" value="${esc(S.cfg.appUrl||'')}" placeholder="e.g. http://192.168.1.10/parts-tracker.html"/>
+      <div class="hint">QR codes link here with ?view=cardId. Needs to be reachable from warehouse phones.</div>
+    </div>
+
+    <div class="sec">Sage 200 — live ETA from POs</div>
+    <div class="fg"><label>Sage 200 REST API base URL</label><input id="sgurl" value="${esc(sg.url||'')}" placeholder="https://your-server/api/v1"/></div>
+    <div class="fg"><label>Bearer token</label><input type="password" id="sgtok" value="${esc(sg.token||'')}" placeholder="Your OAuth bearer token"/></div>
+    <div class="fg"><label>Promise date field name</label><input id="sgfld" value="${esc(sg.dateField||'requestedDeliveryDate')}" placeholder="requestedDeliveryDate"/>
+      <div class="hint">Field on the PO object holding the expected delivery date. Common: requestedDeliveryDate, promisedDeliveryDate, deliveryDate</div>
+    </div>
+
+    <div class="sec">Email alerts — Power Automate</div>
+    ${['c1','c2','c3'].map(cid=>{const col=COLS.find(c=>c.id===cid);const wh=h[cid]||{};return`
+      <div class="wh-block"><div class="wh-block-title"><i class="ti ti-arrow-right"></i>${col.label}</div>
+        <div class="fg"><label>Power Automate URL</label><input id="hu-${cid}" value="${esc(wh.url||'')}" placeholder="https://prod.logic.azure.com/…"/></div>
+        <div class="fg"><label>Notify (comma-separated emails)</label><input id="ht-${cid}" value="${esc(wh.to||'')}" placeholder="warehouse@company.com"/></div>
+      </div>`;}).join('')}
+
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Save settings</button>
+    </div>
+  </div></div>`);
+}
+
+function saveSettings(){
+  S.cfg.apiKey=document.getElementById('sak').value.trim();
+  S.cfg.appUrl=document.getElementById('surl').value.trim();
+  S.cfg.jsonbin={key:document.getElementById('jbk').value.trim(),binId:S.cfg.jsonbin?.binId||''};
+  S.cfg.sage={url:document.getElementById('sgurl').value.trim(),token:document.getElementById('sgtok').value.trim(),dateField:document.getElementById('sgfld').value.trim()||'requestedDeliveryDate'};
+  ['c1','c2','c3'].forEach(cid=>{S.cfg.hooks[cid]={url:document.getElementById(`hu-${cid}`).value.trim(),to:document.getElementById(`ht-${cid}`).value.trim()};});
+  save();closeModal();toast('Settings saved','ok');
+}
+
+function setModal(html){document.getElementById('modal').innerHTML=html}
+function closeModal(){document.getElementById('modal').innerHTML=''}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadLocal();
+
+const urlParams=new URLSearchParams(location.search);
+const viewId=urlParams.get('view');
+
+if(viewId){
+  showWarehouseView(viewId);
+}else{
+  if(Object.keys(S.cards).length===0){
+    const id=uid();
+    S.cards[id]={id,ref:'QUO01802',transfer:'372',customer:'Oakwoods Care – The Maltings',expanded:false,
+      assets:[{no:'23100001150',desc:'Oxford Major 200',location:'General Use',
+        parts:[
+          {code:'11014470',name:'Major 200 Electric Decal Set',qty:1,type:'order',ref:'24636',eta:'',done:false},
+          {code:'V01.03.008',name:'Battery 12v 2.9ah',qty:6,type:'stock',ref:'SPA-04-02',eta:'',done:false}
+        ]}]};
+    S.cols.c0=[id];saveLocal();
+  }
+  pullFromCloud(false).then(()=>render());
+}
+</script>
+</body>
+</html>
